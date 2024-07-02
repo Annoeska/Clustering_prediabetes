@@ -1,0 +1,85 @@
+
+
+# Load data
+
+```{r load data, include = FALSE}
+
+# load data into data frame
+df <- read_dta('../Data/NEO_analyse_PPXX_TIMED_Hameete_2024-05-17.dta')
+
+```
+
+# Data cleaning
+
+## Exclusion criteria and implausibe values
+```{r data cleaning}
+# subset to remove participants
+df_sub <- subset(df, 
+                 diab_prev == 0 &       # remove prev T2D
+                 #t2d_30d ==0    &       # remove T2D within 30 days
+                 nuchter ==1    &       # remove non fasting participants
+                 devmeal ==0    &       # remove partial or full meal deviations
+                 eind2  !=8             # remove loss-to-follow-up  
+)
+
+
+# Create indices for future references and merging
+df_sub$ID <- seq.int(nrow(df_sub))
+
+# Remove variables smaller than 0 when implausible
+df_sub$Insuline_r1[df_sub$Insuline_r1 < 0] <- NA
+df_sub$insuline_r2[df_sub$insuline_r2 < 0] <- NA
+df_sub$insuline_r3[df_sub$insuline_r3 < 0] <- NA
+df_sub$glucose1[df_sub$glucose_r1 < 0] <- NA
+df_sub$glucose2[df_sub$glucose_r2 < 0] <- NA
+df_sub$glucose3[df_sub$glucose_r3 < 0] <- NA
+df_sub$Insuline_r1 <- as.numeric(df_sub$Insuline_r1)
+df_sub$insuline_r2 <- as.numeric(df_sub$insuline_r2)
+
+```
+
+
+## Add insulin sensitivity and secretion
+```{r insulin sensitivity and secretion}
+# Matsuda index -> insulin sensitivity
+insulin_mean <- rowMeans(df_sub[, c("Insuline_r1", "insuline_r2", "insuline_r3")], na.rm=TRUE)     # mean insulin value for each participant
+glucose_mean <- rowMeans(df_sub[, c("glucose1", "glucose2", "glucose3")], na.rm=TRUE)              # mean glucose value for each participant
+
+ins_glc_0 <- df_sub$Insuline_r1 * df_sub$glucose1 * 18.01                                                # variables needed for Matsuda index                                 
+ins_glc_mean <- insulin_mean * glucose_mean * 18.01
+
+df_sub$Matsuda <-(10000/(sqrt((ins_glc_0*ins_glc_mean))))                                          # create Matsuda index  
+
+
+df_sub$IR <- (df_sub$insuline_r2)/(df_sub$glucose2 * df_sub$bmim)                                  # insulin resistance
+
+
+```
+
+
+## Create clustering DFs
+```{r clustering dfs}
+# TUEF/TULIP (more variables version)
+df_T <- df_sub[,c("ID", "leeftijd", "sexe", "glucmet2bl", "bmim",       
+                  "t2d_inc",                                                       
+                  "Matsuda", "IR",  "AUCgluc1" ,                                
+                  "hdlc1", "TG_perc", "MSAT", "MVAT" , "trig1", "choltot1", "middelomtrek", "heupomtrek", 
+                   "Insuline_r1", "GRS_T2DM")]                       
+
+df_T <- na.omit(df_T) # 1529 obs
+
+
+# Whitehall (less variable version)
+df_W <- df_sub[,c("ID","leeftijd", "sexe", "glucmet2bl", "bmim",     
+                  "t2d_inc",                                                    
+                   "Matsuda", "IR", "Insuline_r1",                        
+                  "glucose1", "AUCgluc1",                                       
+                  "trig1", "middelomtrek", "heupomtrek", "hdlc1")]                
+
+df_W <- na.omit(df_W) # 5552 obs
+
+```
+
+
+
+

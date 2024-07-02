@@ -1,0 +1,109 @@
+# Proteomics
+
+## Set up
+```{r proteomics_setup}
+
+df_prot <- df_surv %>% select(c(IL2:NME3, cluster))
+
+## change to numeric and remove NAs for RF
+df_rf_prot <- df_prot %>% 
+  mutate_at(c(1:363), as.numeric) %>%
+  filter_at(vars(1:363), all_vars(!is.na(.))) #%>%
+  #mutate_at(c(1:363), funs(c(scale(.))))
+  
+```
+
+## Random forest for proteins
+# Random forest for proteins
+
+```{r rf_prot}
+set.seed(21)
+
+df_rf_prot$cluster_b <- as.factor(ifelse(df_rf_prot$cluster == "2", "1", "2"))             # beta cell failure, 1 = high risk, 2 = all others
+df_rf_prot$cluster_hrv <- as.factor(ifelse(df_rf_prot$cluster == "4", "1", "2"))           # high risk visceral fat
+df_rf_prot$cluster_hri <- as.factor(ifelse(df_rf_prot$cluster == "1", "1", "2"))           # high risk insulin resistance
+
+
+# Beta cell failure
+
+df_rf_prot_b <- df_rf_prot %>%  select(IL2:NME3, cluster_b)
+rf_b <-randomForest(cluster_b~.,data=df_rf_prot_b, ntree=500, localImp = TRUE) 
+
+
+r_imp_b <- importance(rf_b)
+#plot_test_b <- varImpPlot(rf_b, pch = 5, col = "blue", main = "RF variable importance Tuef/beta cell", cex = 0.6)
+
+importance_frame_b <-measure_importance(rf_b)
+
+
+# High risk visceral fat
+df_rf_prot_hrv <- df_rf_prot %>% select(IL2:NME3, cluster_hrv)
+rf_hrv <-randomForest(cluster_hrv~.,data=df_rf_prot_hrv, ntree=500, localImp = TRUE) 
+importance_frame_hrv <-measure_importance(rf_hrv)
+r_imp_hrv <- importance(rf_hrv)
+
+
+# HR IR
+df_rf_prot_hri <- df_rf_prot %>% select(IL2:NME3, cluster_hri)
+rf_hri <-randomForest(cluster_hri~.,data=df_rf_prot_hri, ntree=500, localImp = TRUE) 
+r_imp_hri <- importance(rf_hri)
+importance_frame_hri <-measure_importance(rf_hri)
+
+
+
+## Create table with top 20
+
+# beta cell
+df_met20_b <- importance_frame_b %>%
+   select(variable, accuracy_decrease)
+sorted_data_b <- df_met20_b[order(-df_met20_b$accuracy_decrease),]
+top_20_prot_b <- sorted_data_b %>%
+  slice_head(n=10) %>%
+  select(variable)
+
+
+# HRV
+df_met20_hrv <- importance_frame_hrv %>%
+   select(variable, accuracy_decrease)
+sorted_data_hrv <- df_met20_hrv[order(-df_met20_hrv$accuracy_decrease),]
+
+top_20_prot_hrv <- sorted_data_hrv %>%
+     slice_head(n=10) %>%
+     select(variable)
+
+# HRI
+df_met20_hri <- importance_frame_hri %>%
+   select(variable, accuracy_decrease)
+sorted_data_hri <- df_met20_hri[order(-df_met20_hri$accuracy_decrease),]
+
+top_20_prot_hri <- sorted_data_hri %>%
+  slice_head(n=10) %>%
+  select(variable)
+
+
+df_rf_tot_prot <- data.frame(top_20_prot_b, top_20_prot_hrv, top_20_prot_hri)
+
+
+
+
+```
+# Results rf
+```{r rf_results_both}
+# change to character
+df_rf_tot_prot %>% mutate(across(everything(), as.character))
+
+
+# delete rownames
+rownames(df_rf_tot_prot) <- NULL
+
+# create titles for columns
+titles_rf_prot <- c("Beta_cell_failure", "HR_visceral_fat", "HR_insulin_resistance")
+colnames(df_rf_tot_prot) <- titles_rf_prot
+
+# print table
+df_rf_tot_prot
+
+write.csv(df_rf_tot_prot, file = "../Output/RF_outcomes_prot.csv")
+
+```
+

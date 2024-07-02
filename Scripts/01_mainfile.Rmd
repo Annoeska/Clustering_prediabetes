@@ -1,0 +1,62 @@
+---
+title: "Metabolicprofiling_mother"
+author: "Annoeska Hameete"
+date: "2024-03-26"
+output:
+  html_document:
+    number_sections: yes
+    keep_md: true
+    
+---
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(fig.path='Output/')
+```
+
+```{r install_packages, include = FALSE}
+
+# load pacman to install and load other packages easily
+if(!require("pacman"))install.packages('pacman')
+library(pacman)
+
+# load packages
+pacman:: p_load("tidyverse",                             # data manipulation including different packages, such as dplyr and ggplot
+                "haven",                                 # load SPSS data
+                "viridis",                               # additional colors for graphs
+                "mclust", "cluster", "fpc",              # clustering
+                "tableone", "survey",                    # create table one
+                "htmlTable", "Hmisc",                    # html tables
+                "fmsb", "factoextra",                    # visualisation
+                "networkD3",                             # sankey plots
+                "survival", "survminer",                 # survival analysis
+                "randomForest", "randomForestExplainer", # random forest
+                "table1", "knitr", "gtsummary", 
+                "ConsensusClusterPlus", "sharp", "openxlsx", "colormap", "gridExtra",
+                "patchwork", "broom", "here")                       
+                
+                            
+theme_set(theme_bw())                                    # set theme for plots
+
+```
+
+
+```{r child = here::here("Scripts", "02_setup.Rmd")}
+```
+
+```{r child = here::here("Scripts", "03_clustering.Rmd")}
+```
+
+```{r child = here::here("Scripts", "04_survival.Rmd")}
+```
+ 
+```{r child = here::here("Scripts", "05_clusterstability.Rmd")}
+```
+ 
+```{r child = here::here("Scripts", "06_metabolomics.Rmd")}
+```
+ 
+```{r child = here::here("Scripts", "07_proteomics.Rmd")}
+```
+ 
+```{r child = here::here("Scripts", "08_output.Rmd")}
+```

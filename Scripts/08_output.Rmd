@@ -1,0 +1,232 @@
+# All outputs
+In this file, all tables and figures that were not computed yet will be added.
+All output files (also from the other Rmd files) can be found in the /Output directory. 
+
+
+# Metabolomics
+```{r}
+source("00_functions.R")
+```
+
+# Set up
+```{r df_baseline}
+df_test2 <- merge(df_surv, df_T)
+df_test3 <- merge(df_surv_w, df_W)
+```
+
+# Baseline tables (table 1)
+```{r baseline_table}
+
+
+table1_original <- table1(~ leeftijd + bmim+ middelomtrek + heupomtrek + glucose1 + Matsuda + IR + trig1 + hdlc1  | factor(sexe), data = df_test2)
+
+
+table1_proxy <- table1(~ leeftijd + bmim+ middelomtrek + heupomtrek + glucose1 + Matsuda + IR + trig1 + hdlc1  |factor(sexe), data = df_test3)
+
+
+tabs <- list(table1_original, table1_proxy)
+lapply(tabs, as_tibble) |>
+  write.xlsx(file = "../Output/Table1.xlsx")
+
+```
+
+
+
+# Baseline table for each cluster
+```{r cluster_table}
+table1_cluster <- table1(~ leeftijd + bmim+ middelomtrek + heupomtrek + glucose1 + Matsuda + IR + trig1 + hdlc1  | factor(c_name), data = df_test2)
+
+
+table1_cluster_proxy <- table1(~ leeftijd + bmim+ middelomtrek + heupomtrek + glucose1 + Matsuda + IR + trig1 + hdlc1  |factor(c_name_w), data = df_test3)
+
+
+tabs <- list(table1_cluster, table1_cluster_proxy)
+lapply(tabs, as_tibble) |>
+  write.xlsx(file = "../Output/Table1_cluster.xlsx")
+
+```
+
+
+# Radar plot original list
+```{r radar_original}
+set.seed(1)
+
+data_radar <- df_test2 %>% select(c(c_name, bmim, glucose1, Matsuda, IR, TG_perc, MVAT, MSAT))
+
+### test
+data_rp <- data.frame(
+  row.names = c("Low risk", "Beta cell failure", "Visceral fat","Insulin resistance fatty liver"),
+  BMI = c(25.7, 29.4, 29.9, 32.4),
+  "Fasting glucose" = c(5.12, 6.24, 5.43, 6.05),
+  "Insulin sensitivity" = c(9.31, 6.24, 3.67, 2.93),
+  "Insulin secretion" = c(0.32, 0.23, 0.50, 0.32),
+  "Liver fat%" = c(3.00, 5.43, 8.07, 19.5),
+  MVAT = c(68.8, 111, 140, 178),
+  MSAT = c(221, 356, 331, 308)
+)
+
+max_min <- data.frame(
+  BMI = c(33, 25),
+  "Fasting glucose" = c(8, 2),
+  "Insulin sensitivity" = c(12, 2),
+  "Insulin secretion" = c(1, 0),
+  "Liver fat%" = c(20, 0),
+  MVAT = c(200, 50),
+  MSAT = c(380, 150)
+)
+rownames(max_min) <- c("Max", "Min")
+
+df_rp_test <- rbind(max_min, data_rp)
+
+
+
+## plot radar chart
+  
+# Define the colors
+brighter_darker_colors <- c("#559E4B","#357ABD","#edbd08", "#734173")
+
+# Use the defined colors for borders and fills with alpha transparency
+colors_border <- brighter_darker_colors
+colors_in <- sapply(brighter_darker_colors, function(col) adjustcolor(col, alpha.f = 0.3))
+  
+
+title <- c("Low risk", "Beta cell failure","Visceral fat", "Insulin resistance fatty liver")
+
+par(mar = rep(0.8, 4))
+par(mfrow= c(2,2))
+
+
+
+for(i in 1:4){
+
+  # Custom the radarChart
+  radarchart(df_rp_test[c(1,2,i+2),], #axistype=0, 
+  
+    #custom polygon
+    pcol=colors_border[i] , pfcol=colors_in[i] , plwd=3, plty=1 , 
+  
+    #custom the grid
+    cglcol="grey", cglty=1, axislabcol="grey", caxislabels=seq(0,20,5), cglwd=0.8,
+  
+    #custom labels
+    vlcex=0.8,
+    
+    #title
+    title=title[i]
+    )
+}
+
+
+```
+# Radar plot proxy
+```{r radar_proxy}
+set.seed(2)
+
+
+### test
+data_rp_w <- data.frame(
+  row.names = c("Low risk", "Beta cell failure", "Visceral fat", "Insulin resistance fatty liver"),
+  BMI = c(24.9, 29.3, 35.4, 29.5),
+  "Fasting glucose" = c(5.19, 5.43, 5.76, 5.80),
+  "Insulin sensitivity" = c(9.42, 6.31, 3.73, 2.85),
+  "Insulin secretion" = c(0.32, 0.29, 0.32, 0.46),
+  "Triglycerides" = c(0.92, 1.26, 1.57, 2.08),
+  "Hip circumference" = c(101, 110, 121, 108),
+  "Waist circumference" = c(87.3, 100, 115, 102)
+)
+
+max_min_w <- data.frame(
+  BMI = c(38, 25),
+  "Fasting glucose" = c(6.5, 4),
+  "Insulin sensitivity" = c(13, 2),
+  "Insulin secretion" = c(1, 0),
+  "Triglycerides" = c(2.5, 0.5),
+  "Hip circumference" = c(135, 100),
+  "Waist circumference" = c(125, 85)
+)
+rownames(max_min_w) <- c("Max", "Min")
+
+df_rp_test_w <- rbind(max_min_w, data_rp_w)
+
+
+
+title <- c("Low risk", "Beta cell failure","Visceral fat", "Insulin resistance fatty liver")
+par(mar = rep(0.8, 4))
+par(mfrow= c(2,2))
+
+
+
+for(i in 1:4){
+
+  # Custom the radarChart
+  radarchart(df_rp_test_w[c(1,2,i+2),], #axistype=0, 
+  
+    #custom polygon
+    pcol=colors_border[i] , pfcol=colors_in[i] , plwd=3, plty=1 , 
+  
+    #custom the grid
+    cglcol="grey", cglty=1, axislabcol="grey", caxislabels=seq(0,20,5), cglwd=0.8,
+  
+    #custom labels
+    vlcex=0.8,
+    
+    #title
+    title=title[i]
+    )
+}
+
+```
+
+# Lifestyle factors table
+```{r lifestyle}
+df_test2$mid_point <- (df_surv$opstatijd-(df_surv$tijd_in_bed/2))/3600 # define midpoint of sleep
+
+
+table_ls <- table1(~ smoking + dhdi + alc_g + totmeth + leismeth + Pittstotal + mid_point + IDS_total_score| c_name, data = df_test2)
+
+```
+
+## Boxplots metabolites
+```{r violin_plot_final}
+new_levels <- c("LR","BCF", "VF", "IRFL")
+
+# Reorder the factor levels
+df_surv$c_name_plot <- factor(df_surv$c_name, levels = new_levels)
+
+p_glc <- violin_plot(df_surv$Glc_1, "Glucose (mmol/L)", c(3,7))
+p_ile <- violin_plot(df_surv$Ile_1, "Isoleucine (mmol/L)", c(0.02, 0.15))
+p_leu <- violin_plot(df_surv$Leu_1, "Leucine (mmol/L)", c(0.04, 0.13))
+p_gp <- violin_plot(df_surv$Gp_1, "Glycoprotein (mmol/L)", c(0.9, 2.0))
+
+p_lhf <- violin_plot(df_surv$LHDLFC_1, "LHDLFC (mmol/L)", c(0.01, 0.2))
+p_lhc <- violin_plot(df_surv$LHDLC_1, "LHDLC (mmol/L)", c(0.01, 0.8))
+p_xlhdlp <- violin_plot(df_surv$XLHDLP_1, "XLHDLP (mmol/L)", c(0, 0.000001))
+p_xlhdll <- violin_plot(df_surv$XLHDLL_1, "XLHDLL (mmol/L)", c(0.01,1))
+p_lhdll <- violin_plot(df_surv$LHDLL_1, "LHDLL (mmol/L)", c(0.01, 1.8))
+p_lhdlce <- violin_plot(df_surv$LHDLCE_1, "LHDLCE (mmol/L)", c(0.01, 0.7))
+p_lhdlpl <- violin_plot(df_surv$LHDLPL_1, "LHDLPL (mmol/L)", c(0.01, 0.8))
+
+p_vtg <- violin_plot(df_surv$VLDLTG_1, "VLDLTG (mmol/L)", c(0.2, 3))
+p_mvpl <- violin_plot(df_surv$MVLDLPL_1, "MVLDLPL (mmol/L)", c(0.01, 0.4))
+p_mvp <- violin_plot(df_surv$MVLDLP_1, "MVLDLP (mmol/L)", c(0, 0.00000007))
+p_mvtg <- violin_plot(df_surv$MVLDLTG_1, "MVLDLTG (mmol/L)", c(0.01, 1))
+
+p_lvl <- violin_plot(df_surv$LVLDLP_1, "LVLDLP (mmol/L)", c(0.0000000002, 0.00000002))
+p_lvpl <- violin_plot(df_surv$LVLDLPL_1, "LVLDLPL (mmol/L)", c(0.01, 0.2))
+p_lvtg <- violin_plot(df_surv$LVLDLTG_1, "LVLDLTG (mmol/L)", c(0.01, 0.8))
+p_lvll <- violin_plot(df_surv$LVLDLL_1, "LVLDLL (mmol/L)", c(0.01, 1.2))
+
+
+plot_violin_1 <- p_glc + p_ile + p_leu + p_gp + p_lhf + p_lhc + p_xlhdlp + p_xlhdll + 
+               p_lhdll + p_lhdlce + p_lhdlpl + p_mvpl + plot_layout(ncol =4)
+               
+plot_violin_2 <-  p_mvp + p_mvtg +  p_vtg + p_lvl + p_lvpl + p_lvtg + p_lvll + plot_layout(ncol = 4)
+
+ggsave("../Output/plot_violin_final.png", plot_violin_1, width = 26 , height = 17, dpi = 500, units = "cm")
+ggsave("../Output/plot_violin_final_p2.png", plot_violin_2, width = 26, height = 12, dpi = 500, units = "cm")
+
+
+```
+
+
+

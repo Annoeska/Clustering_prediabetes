@@ -1,0 +1,219 @@
+# Get functions
+```{r}
+source("00_functions.R")
+```
+
+
+
+# Cluster analysis
+## Create variables for clustering
+```{r cluster preparation}
+# set number of clusters to 4
+cluno <- 4
+
+# create variable with clustering variables
+modeller <- c("MSAT_scld",
+              "MVAT_scld",
+              "Matsuda_scld",
+              "IR_scld",
+              "AUCgluc1_scld",
+              "hdlc1_scld",
+              "TG_perc_scld",
+              "GRS_T2DM")
+
+modeller_nonscaled <- str_replace_all(modeller,"_scld","")
+
+# whitehall (another version)
+modeller_w <- c("AUCgluc1_scld",
+              "Matsuda_scld",
+              "IR_scld",
+              "Insuline_r1_scld",
+              "trig1_scld",
+              "middelomtrek_scld",
+              "heupomtrek_scld",
+              "bmim_scld",
+              "hdlc1_scld")
+
+modeller_nonscaled_w <- str_replace_all(modeller_w,"_scld","")
+
+# create data set with needed variables
+data.sh <- df_T %>% select(ID, leeftijd, sexe, glucmet2bl, bmim,       
+                  t2d_inc,                                                  
+                  Matsuda, IR,                                        
+                  hdlc1, TG_perc, MSAT, MVAT, GRS_T2DM,
+                  one_of(modeller_nonscaled))
+
+data.anal <- data.sh %>% 
+             ungroup() 
+
+# whitehall
+data.sh_w <- df_W %>% select(ID, leeftijd, sexe, glucmet2bl, bmim,       
+                           t2d_inc, 
+                           AUCgluc1, 
+                           Matsuda, IR, Insuline_r1,                                     
+                           hdlc1, trig1, middelomtrek, heupomtrek, 
+                           one_of(modeller_nonscaled_w))
+
+data.anal_w <- data.sh_w %>% 
+  ungroup() 
+
+
+```
+
+## Prepare data
+```{r scaling}
+
+# use function to scale data sets
+data.scld <- preparedata(data.anal)                           # TUEF
+data.scld_w <- preparedata_w(data.anal_w)                     # Whitehall
+
+```
+
+## Cluster analysis
+```{r cluster_analysis}
+# data frame for clustering
+modeling <- data.scld %>% 
+        select(one_of(modeller)) 
+
+modeling_w <- data.scld_w %>% 
+  select(one_of(modeller_w)) 
+
+# calculate gowers distances
+gow_dist <- daisy(modeling, metric="gower")
+gow_dist_w <- daisy(modeling_w, metric="gower")
+
+data.scld_1 <- data.scld %>% select(one_of(modeller))
+data.scld_w_1 <- data.scld_w %>% select(one_of(modeller_w))
+
+
+# test silhouette width
+sil_width <- c(NA)
+for(i in 2:10){
+  pam_fit <- pam(gow_dist,
+                 diss = TRUE,
+                 k = i)
+  
+  sil_width[i] <- pam_fit$silinfo$avg.width
+}
+
+sil_width_w <- c(NA)
+for(i in 2:10){
+  pam_fit_w <- pam(gow_dist_w,
+                 diss = TRUE,
+                 k = i)
+  
+  sil_width_w[i] <- pam_fit_w$silinfo$avg.width
+}
+
+
+# Elbow plot
+plot(1:10, sil_width, type="b", xlab="Number of Clusters",
+  ylab="Silhouette")
+
+plot(1:10, sil_width_w, type = "b", xlab = "Number of Clusters", ylab = "Silhouette")
+
+
+# pamk clustering prep
+modeling.all <- data.scld %>% 
+                ungroup() %>% 
+            select(one_of(modeller)) 
+
+modeling.all_w <- data.scld_w %>% 
+  ungroup() %>% 
+  select(one_of(modeller_w)) 
+
+```
+
+
+## Consensus clustering
+
+```{r concensus_clustering}
+
+
+
+myDistFunc = function(x){ daisy(x, metric="gower")} # use this as the distance matrix
+
+#### slow step ####
+# res_pam <- ConsensusClusterPlus(t(modeling.all),
+#                                maxK = 8,
+#                                reps = 100,
+#                                pItem = 0.8, ## percent of sample to consider for clustering
+#                                  pFeature = 1, ## percent of features to consider
+#                                  plot = "png",
+#                                  clusterAlg = "pam",
+#                                  title = "../Output/consensus",
+#                                  distance = "myDistFunc",
+#                                  seed = 2023,
+#                                  verbose = T)   
+# calcICL(res_pam, title = "../Output/consensus_plots", plot = "png")
+# 
+# ### slow step ####
+# res_pam_w <- ConsensusClusterPlus(t(modeling.all_w),
+#                                    maxK = 8,
+#                                    reps = 100,
+#                                    pItem = 0.8, ## percent of sample to consider for clustering
+#                                    pFeature = 1, ## percent of features to consider
+#                                    plot = "png",
+#                                    clusterAlg = "pam",
+#                                    title = "pam_w",
+#                                    distance = "myDistFunc",
+#                                    seed = 2023,
+#                                    verbose = T)    
+#  calcICL(res_pam_w, title = "pam_w_plots")
+
+
+```
+
+# PAM clustering
+```{r clustering}
+cluno = 4
+set.seed(25)
+pam <- daisy(modeling.all, metric = "gower")
+kc <- pam(pam,k=cluno)
+centers <-  modeling.all[kc$medoids,]
+
+pam_w <- daisy(modeling.all_w, metric = "gower")
+kc_w <- pam(pam_w,k=cluno)
+centers_w <-  modeling.all_w[kc_w$medoids,]
+
+# create variables for plots
+clusterplot <- bind_cols(newcluster = kc$cluster,modeling.all) %>% 
+              left_join(data.scld) %>%
+              select(ID, newcluster,sexe,leeftijd,bmim,
+                     IR, 
+                     one_of(modeller_nonscaled),one_of(modeller))
+
+clusterplot_w <- bind_cols(newcluster_w = kc_w$cluster,modeling.all_w) %>% 
+  left_join(data.scld_w,) %>%
+  select(ID, newcluster_w,sexe,leeftijd,
+         bmim,
+         IR, 
+         one_of(modeller_nonscaled_w),one_of(modeller_w))
+
+```
+
+# Add clusternames
+```{r clusternames}
+# set cluster to numeric
+cluster.all <- clusterplot %>% 
+              mutate(cluster = as.numeric(newcluster)) 
+
+cluster.all_w <- clusterplot_w %>% 
+  mutate(cluster_w = as.numeric(newcluster_w)) 
+
+
+## if using 4 clusters instead of 6 clusters
+cluster.all$c_name <- as.factor(ifelse(cluster.all$cluster == 1, 'IRFL',
+                                  ifelse(cluster.all$cluster == 2, 'BCF',
+                                  ifelse(cluster.all$cluster == 3, 'LR', 
+                                  ifelse(cluster.all$cluster == 4, 'VF', NA)))))
+
+
+cluster.all_w$c_name_w <- as.factor(ifelse(cluster.all_w$cluster_w == 1, 'BCF',
+                                  ifelse(cluster.all_w$cluster_w == 2, 'IRFL',
+                                  ifelse(cluster.all_w$cluster_w == 3, 'VF', 
+                                  ifelse(cluster.all_w$cluster_w == 4, 'LR',NA)))))
+
+```
+
+

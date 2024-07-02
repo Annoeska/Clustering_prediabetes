@@ -1,0 +1,213 @@
+
+
+# Metabolomics
+```{r}
+source("00_functions.R")
+```
+
+
+## Exclude metabolite ratios and postprandial
+
+```{r metabolomics_setup}
+
+# new df with cluster assignment and all metabolites
+df_rf <- df_surv %>% select(XXLVLDLP_1:Gp_3, cluster)
+
+df_rf_w <- df_surv_w %>% select(XXLVLDLP_1:Gp_3, cluster_w)
+
+
+# import file with variable names that should be excluded
+metab_exc <- read.csv("../Data/Metabolite_Ratios_list.csv")
+metab_exc_v <- metab_exc$x
+
+# also exclude postprandial
+post_pran <- names(df_rf)[endsWith(names(df_rf), "_3")]
+
+# combine metab and postprandial
+metab_pran <- union(metab_exc_v, post_pran)
+
+
+# make df with fasting and postprandial
+df_rf_fp <- df_rf %>%
+  select(!all_of(metab_exc_v))
+
+```
+
+```{r remove_outliers}
+
+# Replace any value <= 0 with NA
+df_rf_fp <- df_rf_fp %>% mutate_at(vars(XXLVLDLP_1:Gp_3), ~ifelse(.<=0,NA,.))       # for fasting and postprandial
+ 
+
+w_2 <- apply(df_rf_fp[,c(1:296)], 2, function(x) is_outlier(x, nSD = 5)) # list: 296 metabolites, more than 5 SD
+
+
+# Replace outliers with NA - fasting and postprandial
+for (i in names(w_2)) {
+  a <- w_2[[i]]
+  if (!is.null(a)){
+    df_rf_fp[a, i] <- NA
+  }
+}
+
+```
+
+
+### Remove missings in individuals (>40%)
+
+```{r remove_missings_individual}
+
+df_rf_fp$fmis_sample = apply(df_rf_fp, 1,  function(x) { sum(is.na(x)) / length(x)})
+df_rf_fp <- subset(df_rf_fp, fmis_sample <= 0.4)
+
+df_rf_fp <- df_rf_fp %>% select(c(XXLVLDLP_1:cluster),)
+
+```
+
+
+```{r remove_missings_metab}
+
+# Filter metabolites with >10% missing
+fmis = apply(df_rf_fp, 2,  function(x) {sum(is.na(x)) / length(x)})
+
+# Filter samples
+fmis_df <- as.data.frame(fmis)
+fmis_df <- fmis_df %>% rownames_to_column(var = "Meta_status")
+fmis_df$Group <-  str_split(fmis_df$Meta_status, "_", simplify = T)[,2]
+fmis_df$Group <- ifelse(fmis_df$Group == "1", "Fasting_state", "Postprandial_state")
+fmis_df <- fmis_df[order(fmis_df$fmis),]
+fmis_df  <- fmis_df %>% 
+  group_by(Group) %>% 
+  arrange(desc(fmis)) %>% 
+  ungroup()
+
+
+w = which(fmis > 0.1) # 20 metabolites with missing rate > 10%
+Removemetabolites <- names(w) 
+Removemetabolites_fasting <- Removemetabolites[grep("_1", Removemetabolites)] # in the fasting
+Removemetabolites_postprandial <- Removemetabolites[grep("_3", Removemetabolites)] # in the postprandial
+
+
+df_fp <- df_rf_fp %>% 
+  select(!any_of(Removemetabolites))
+
+```
+
+```{r rf_final_check}
+# Scaling
+df_rf_met_num <- df_fp %>% 
+   mutate_at(c(1:272), as.numeric) %>%
+  mutate_at(c(1:272), funs(c(scale(.))))
+
+
+## Impute low values
+# impute with min/2
+
+df_rf_tot <- impute_min2(df_rf_met_num)
+
+## fasting
+post_pran <- names(df_rf_tot)[endsWith(names(df_rf_tot), "_3")]
+df_rf_met <- df_rf_tot %>% select(!all_of(post_pran))
+
+```
+
+
+
+## Random forest
+```{r RF_TUEF_withoutiPVS}
+
+set.seed(71)
+
+df_rf_met$cluster_b <- as.factor(ifelse(df_rf_met$cluster == "2", "1", "2"))             # beta cell failure, 1 = high risk, 2 = all others
+df_rf_met$cluster_hrv <- as.factor(ifelse(df_rf_met$cluster == "4", "1", "2"))           # high risk visceral fat
+df_rf_met$cluster_hri <- as.factor(ifelse(df_rf_met$cluster == "1", "1", "2"))           # high risk insulin resistance
+
+
+# Beta cell failure
+df_rf_b <- df_rf_met %>%  select(LVLDLP_1:Gp_1, cluster_b)
+rf_b <-randomForest(cluster_b~.,data=df_rf_b, ntree=500, localImp = TRUE) 
+
+
+r_imp_b <- importance(rf_b)
+#plot_test_b <- varImpPlot(rf_b, pch = 5, col = "blue", main = "RF variable importance Tuef/beta cell", cex = 0.6)
+
+importance_frame_b <-measure_importance(rf_b)
+
+
+# High risk visceral fat
+df_rf_hrv <- df_rf_met %>% select(LVLDLP_1:Gp_1, cluster_hrv)
+rf_hrv <-randomForest(cluster_hrv~.,data=df_rf_hrv, ntree=500, localImp = TRUE) 
+importance_frame_hrv <-measure_importance(rf_hrv)
+r_imp_hrv <- importance(rf_hrv)
+
+
+# HR IR
+df_rf_hri <- df_rf_met %>% select(LVLDLP_1:Gp_1, cluster_hri)
+rf_hri <-randomForest(cluster_hri~.,data=df_rf_hri, ntree=500, localImp = TRUE) 
+
+r_imp_hri <- importance(rf_hri)
+importance_frame_hri <-measure_importance(rf_hri)
+
+
+## Create table with top 20
+
+# beta cell
+df_met20_b <- importance_frame_b %>%
+   select(variable, accuracy_decrease)
+sorted_data_b <- df_met20_b[order(-df_met20_b$accuracy_decrease),]
+top_20_b <- sorted_data_b %>%
+  slice_head(n=10) %>%
+  select(variable)
+
+
+# HRV
+df_met20_hrv <- importance_frame_hrv %>%
+   select(variable, accuracy_decrease)
+sorted_data_hrv <- df_met20_hrv[order(-df_met20_hrv$accuracy_decrease),]
+
+top_20_hrv <- sorted_data_hrv %>%
+     slice_head(n=10) %>%
+     select(variable)
+
+# HRI
+df_met20_hri <- importance_frame_hri %>%
+   select(variable, accuracy_decrease)
+sorted_data_hri <- df_met20_hri[order(-df_met20_hri$accuracy_decrease),]
+
+top_20_hri <- sorted_data_hri %>%
+  slice_head(n=10) %>%
+  select(variable)
+
+
+df_rf_tot_withoutipvs <- data.frame(top_20_b, top_20_hrv, top_20_hri)
+
+```
+
+# Table metabolomics output
+### Total table
+```{r table_rf_results}
+
+# Create dataframe with all top 20s for TUEF and WH
+df_rf_tot <- data.frame(top_20_b, top_20_hrv, top_20_hri)
+
+# change to character
+df_rf_tot %>% mutate(across(everything(), as.character))
+
+
+# delete rownames
+rownames(df_rf_tot) <- NULL
+
+# create titles for columns
+titles_rf <- c("Beta_cell_failure", "HR_visceral_fat", "HR_insulin_resistance")
+colnames(df_rf_tot) <- titles_rf
+
+# print table
+df_rf_tot
+
+write.csv(df_rf_tot, file = "../Output/RF_outcomes_metab.csv")
+
+```
+
+
+
+

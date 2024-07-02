@@ -1,0 +1,149 @@
+# Survival analysis
+## Kaplan meier
+```{r survival_analysis}
+# new data set including clusters and all other variables
+df_surv <- merge(df_sub, cluster.all, by = "ID")
+df_surv_w <- merge(df_sub, cluster.all_w, by = "ID")
+
+# incorporate diabetes diagnosis time
+df_surv$time <- difftime(df_surv$einddatum2, df_surv$visitdd, units = "days")
+df_surv$time_diab <- difftime(df_surv$diabetes2_date, df_surv$visitdd, units = "days")
+
+df_surv <- df_surv %>%
+  mutate(time_diab = coalesce(time_diab, time))
+df_surv$time_y <- as.numeric(df_surv$time_diab/365.25)   # change to year (divided by 365.25)
+
+# same for whitehall
+df_surv_w$time_w <- difftime(df_surv_w$einddatum2, df_surv_w$visitdd, units = "days")
+df_surv_w$time_diab_w <- difftime(df_surv_w$diabetes2_date, df_surv_w$visitdd, units = "days")
+
+df_surv_w <- df_surv_w %>%
+  mutate(time_diab_w = coalesce(time_diab_w, time_w))
+
+df_surv_w$time_y <- as.numeric(df_surv_w$time_diab_w/365.25)   # change to year
+
+table(df_surv$cluster, df_surv$t2d_inc)
+table(df_surv_w$cluster_w, df_surv_w$t2d_inc)
+```
+
+# Create surv objects
+```{r surv_object}
+surv_object <- Surv(df_surv$time_y, df_surv$t2d_inc)        # create surv object
+fit1 <- survfit(surv_object ~ c_name, data = df_surv)       # create plot object
+
+
+surv_object_w <- Surv(df_surv_w$time_y, df_surv_w$t2d_inc)
+fit1_w <- survfit(surv_object_w ~ c_name_w, data = df_surv_w)
+
+```
+
+
+# Plot kaplan meier
+```{r kaplan_meier}
+
+splots <- list()
+
+par(pty = "s")
+p1 <-  ggsurvplot(fit1, fun = function(x) 1 -x, data = df_surv, title = "Original list", pval = TRUE, palette = c("#7dadd4","#8f6799","#88c584","#E7B800"), censor.size = 0.05, xlab = "years", ylab = "T2DM cumulative incidence", font.y = 10, font.x = 10, font.title = 10, font.caption = 8, font.tickslab = 8, pval.size = 3, legend.labs = levels(df_surv$c_name))
+ 
+p2 <- ggsurvplot(fit1_w, fun = function(x) 1 -x, data = df_surv_w, pval = TRUE, title = "Proxy list" ,palette = c("#7dadd4", "#8f6799", "#88c584", "#e7b800"), censor.size = 0.05, xlab = "years", ylab = "T2DM cumulative incidence", font.y = 10,font.x = 10,  font.title = 10, font.caption = 8, font.tickslab = 8, pval.size =3, legend.labs = levels(df_surv_w$c_name_w))
+
+
+# create combined plot
+combined_plot <- p1$plot/p2$plot
+
+plot_surv <- (p1$plot + p2$plot) / guide_area() + 
+  plot_layout(guides = 'collect')
+
+ggsave("../Output/plot_survival_original.png", combined_plot, width = 5, height = 8, dpi = 500)
+
+```
+
+# Cox regression
+
+```{r cox}
+# relevel to make low risk cluster
+
+df_surv$c_name <- relevel(df_surv$c_name, ref = "LR")
+df_surv_w$c_name_w <- relevel(df_surv_w$c_name_w, ref = "LR")
+
+# cox regression
+fit.coxph <- coxph(surv_object ~ c_name,
+                   data = df_surv)                  # crude
+fit.coxph
+
+fit.coxph_conf <-coxph(surv_object ~ c_name + leeftijd.x + bmim.x + sexe.x,
+                   data = df_surv )                # with confounders
+
+
+# cox regression proxy list
+fit.coxph_w <- coxph(surv_object_w ~ c_name_w , data = df_surv_w)  # crude
+fit.coxph_w_conf <- coxph(surv_object_w ~ c_name_w  + leeftijd.x + sexe.x, data=as.data.frame(df_surv_w)) #with confounders, no BMI because BMI is in cluster
+
+
+```
+
+```{r forest_plots}
+# forest plot TUEF
+forest <- ggforest(fit.coxph, data = df_surv, main = "TUEF without confounder correction")
+forest_conf <- ggforest(fit.coxph_conf, data = df_surv, main = "TUEF with confounder correction")
+
+
+
+# forest plot WH
+forest_w <- ggforest(fit.coxph_w, data = df_surv_w, main = "Whitehall without confouder correction")
+forest_w_conf <- ggforest(fit.coxph_w_conf, data = df_surv_w, main = "Whitehall with confouder correction")
+
+```
+
+
+## Testing assumptions 
+```{r testing assumptions}
+## proportional hazards
+
+cox_zph <- cox.zph(fit.coxph_conf)
+cox_zph
+
+cox_zph_norm <- cox.zph(fit.coxph)
+cox_zph_norm
+
+cox_zph_w <- cox.zph(fit.coxph_w_conf)
+cox_zph_w
+
+
+
+## influencial 
+ggcoxdiagnostics(fit.coxph_conf, type = "deviance",
+                 linear.predictions = FALSE, ggtheme = theme_bw())
+
+
+```
+
+
+## Sensitivity analysis
+```{r}
+## sensitivity analysis
+fit.coxph_conf_sens <-coxph(surv_object ~ c_name + leeftijd.x + bmim.x + sexe.x + totmeth + Pittstotal + dhd15_finalscore + smoking, 
+                   data = df_surv )                # with confounders
+
+fit.coxph_w_conf_sens <-coxph(surv_object_w ~ c_name_w + leeftijd.x + sexe.x + totmeth + Pittstotal + dhd15_finalscore + smoking, 
+                   data = df_surv_w ) 
+
+forest_conf_sens <- ggforest(fit.coxph_conf_sens, data = df_surv, main = "TUEF with confounder correction")
+forest_w_conf_sens  <- ggforest(fit.coxph_w_conf_sens, data = df_surv_w, main = "Whitehall with confouder correction")
+
+cox_zph_s <- cox.zph(fit.coxph_conf_sens)
+cox_zph_w_s <- cox.zph(fit.coxph_w_conf_sens)
+
+```
+
+
+## Write results
+```{r cox_results}
+cox_results <- list(fit.coxph, fit.coxph_conf, fit.coxph_w, fit.coxph_w_conf) %>% 
+   lapply(function(x) tidy(x, exponentiate = T, conf.int = T)) %>% do.call(rbind, .) 
+ 
+write.xlsx(cox_results, file = "../Output/cox_results.xlsx", rowNames = F)
+
+```
+
